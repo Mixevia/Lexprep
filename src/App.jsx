@@ -2,11 +2,10 @@ import { useState, useEffect, useRef } from "react";
 
 // Helper to call DeepSeek API
 const callDeepSeek = async (prompt, apiKey) => {
-  const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+  const response = await fetch("/api/deepseek.js", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: "deepseek-chat", // or "deepseek-coder" if you prefer
@@ -23,7 +22,7 @@ const callDeepSeek = async (prompt, apiKey) => {
 
   const data = await response.json();
   const content = data.choices[0].message.content;
-  return content;
+  return data.content;
 };
 
 // ─── FONTS & LORDICONS ────────────────────────────────────────────────────────
