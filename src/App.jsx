@@ -458,7 +458,7 @@ const NAV_ITEMS = [
   { id:"practice", label:"Practice", licon:"https://cdn.lordicon.com/imamsnbq.json", emoji:"🎯" },
   { id:"papers",   label:"Papers",   licon:"https://cdn.lordicon.com/stipfqkk.json",  emoji:"📄" },
   { id:"extra",    label:"Extra",    licon:"https://cdn.lordicon.com/nobvwgyv.json",  emoji:"🏆" },
-  { id:"settings"  label:"Settings", licon:"https://cdn.lordicon.com/nobvwgyv.json",  emoji:"⚙️"},
+  { id:"settings", label:"Settings", licon:"https://cdn.lordicon.com/nobvwgyv.json", emoji:"⚙️"},
 ];
 
 function BottomNav({ tab, setTab, c }) {
