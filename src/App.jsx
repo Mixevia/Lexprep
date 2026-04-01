@@ -790,29 +790,70 @@ function PracticeTab({ c }) {
   const [streak, setStreak] = useState(0);
 
   async function gen(t) {
-    setLoading(true); setQ(null); setSel(null); setSub(false);
+    setLoading(true);
+    setQ(null);
+    setSel(null);
+    setSub(false);
+  
     const tm = TOPICS.find(x => x.id === t);
+    if (!tm) {
+      setQ({ error: true });
+      setLoading(false);
+      return;
+    }
+  
+    // Get saved API settings
+    const apiKey = store.get("lp_apiKey", "");
+    const apiBase = store.get("lp_apiBase", "https://api.deepseek.com/v1/chat/completions");
+    const model = store.get("lp_model", "deepseek-chat");
+  
+    if (!apiKey) {
+      setQ({ error: true, message: "API key not set. Please go to Settings and enter your DeepSeek API key." });
+      setLoading(false);
+      return;
+    }
+  
+    const prompt = `Generate ONE challenging multiple-choice question for the Makerere University LLB pre-entry exam on the topic: "${tm.label}" (${tm.sub}).
+  
+  Return ONLY valid JSON — no markdown, no explanation, no backticks:
+  {"question":"full question text","options":["A. ...","B. ...","C. ...","D. ..."],"answer":0,"explanation":"Why the correct answer is right, with an exam tip."}
+  
+  "answer" is the 0-based index of the correct option.`;
+  
     try {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+      const response = await fetch(apiBase, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514", max_tokens: 1000,
-          messages: [{ role: "user", content: `Generate ONE challenging multiple-choice question for the Makerere University LLB pre-entry exam on the topic: "${tm.label}" (${tm.sub}).
-
-Return ONLY valid JSON — no markdown, no explanation, no backticks:
-{"question":"full question text","options":["A. ...","B. ...","C. ...","D. ..."],"answer":0,"explanation":"Why the correct answer is right, with an exam tip."}
-
-"answer" is the 0-based index of the correct option.` }] }),
+          model: model,
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 1000,
+          temperature: 0.7,
+        }),
       });
-      const d = await r.json();
-      const text = d.content.map(b => b.text || "").join("");
-      setQ(JSON.parse(text.replace(/```json|```/g, "").trim()));
-    } catch { setQ({ error: true }); }
+  
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error ${response.status}: ${errorText}`);
+      }
+  
+      const data = await response.json();
+      const content = data.choices[0].message.content;
+      // Remove any markdown code fences
+      const clean = content.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      setQ(parsed);
+    } catch (err) {
+      console.error(err);
+      setQ({ error: true, message: err.message || "Failed to generate question." });
+    }
     setLoading(false);
   }
-
-  const topM = topic ? SM[topic] : {};
-
+  
+  
   if (!topic) return (
     <div style={{ overflowY: "auto", height: "100%" }}>
       <div style={{ padding: "22px 18px", maxWidth: 560, margin: "0 auto" }}>
@@ -889,7 +930,7 @@ Return ONLY valid JSON — no markdown, no explanation, no backticks:
                 {q.question}
               </p>
             </Card>
-
+            
             <div style={{ marginBottom: 14 }}>
               {q.options.map((opt, i) => {
                 let bg = c.card, border = c.border, col = c.text, fw = 400;
@@ -940,7 +981,7 @@ Return ONLY valid JSON — no markdown, no explanation, no backticks:
         {!loading && q?.error && (
           <Card c={c} style={{ textAlign: "center", padding: 40, borderColor: c.error }}>
             <div style={{ fontSize: 14, color: c.error, marginBottom: 16, fontFamily: "'Nunito',sans-serif" }}>
-              Failed to generate. Check your connection.
+              {q.message || "Failed to generate question. Check your API settings and try again."}
             </div>
             <Btn c={c} onClick={() => gen(topic)} style={{ width: "auto", padding: "10px 28px" }}>Retry</Btn>
           </Card>
@@ -1058,30 +1099,72 @@ function ExtraTab({ c }) {
   const [sub, setSub] = useState(false);
 
   async function genBatch() {
-    setLoading(true); setQs([]); setAns({}); setSub(false);
-    const tm = TOPICS.find(t => t.id === topic);
-    try {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514", max_tokens: 1000,
-          messages: [{ role: "user", content: `Generate exactly 5 ${diff}-difficulty multiple-choice questions for the MUK LLB pre-entry exam on "${tm.label}" (${tm.sub}).
+  setLoading(true);
+  setQs([]);
+  setAns({});
+  setSub(false);
+
+  const tm = TOPICS.find(t => t.id === topic);
+  if (!tm) {
+    setQs([{ error: true, message: "Topic not found" }]);
+    setLoading(false);
+    return;
+  }
+
+  const apiKey = store.get("lp_apiKey", "");
+  const apiBase = store.get("lp_apiBase", "https://api.deepseek.com/v1/chat/completions");
+  const model = store.get("lp_model", "deepseek-chat");
+
+  if (!apiKey) {
+    setQs([{ error: true, message: "API key not set. Please go to Settings." }]);
+    setLoading(false);
+    return;
+  }
+
+  const prompt = `Generate exactly 5 ${diff}-difficulty multiple-choice questions for the MUK LLB pre-entry exam on "${tm.label}" (${tm.sub}).
 
 Return ONLY a valid JSON array — no markdown, no backticks, nothing else:
 [{"question":"...","options":["A. ...","B. ...","C. ...","D. ..."],"answer":0,"explanation":"..."}]
 
-Exactly 5 objects. "answer" is 0-based index.` }] }),
-      });
-      const d = await r.json();
-      const text = d.content.map(b => b.text || "").join("");
-      setQs(JSON.parse(text.replace(/```json|```/g, "").trim()));
-    } catch { setQs([{ error: true }]); }
-    setLoading(false);
+Exactly 5 objects. "answer" is 0-based index.`;
+
+  try {
+    const response = await fetch(apiBase, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 1500,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API error ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0].message.content;
+    const clean = content.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(clean);
+    if (Array.isArray(parsed) && parsed.length === 5) {
+      setQs(parsed);
+    } else {
+      throw new Error("API did not return exactly 5 questions.");
+    }
+  } catch (err) {
+    console.error(err);
+    setQs([{ error: true, message: err.message || "Failed to generate batch." }]);
   }
+  setLoading(false);
+}
 
-  const correct = sub ? qs.filter((q, i) => ans[i] === q.answer).length : 0;
-  const allAns = Object.keys(ans).length === qs.length && qs.length > 0;
-
+  
   if (!topic) return (
     <div style={{ overflowY: "auto", height: "100%" }}>
       <div style={{ padding: "22px 18px", maxWidth: 560, margin: "0 auto" }}>
