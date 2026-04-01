@@ -1,5 +1,31 @@
 import { useState, useEffect, useRef } from "react";
 
+// Helper to call DeepSeek API
+const callDeepSeek = async (prompt, apiKey) => {
+  const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "deepseek-chat", // or "deepseek-coder" if you prefer
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+      max_tokens: 1000,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`API error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices[0].message.content;
+  return content;
+};
+
 // ─── FONTS & LORDICONS ────────────────────────────────────────────────────────
 const GlobalStyles = () => {
   useEffect(() => {
@@ -432,6 +458,7 @@ const NAV_ITEMS = [
   { id:"practice", label:"Practice", licon:"https://cdn.lordicon.com/imamsnbq.json", emoji:"🎯" },
   { id:"papers",   label:"Papers",   licon:"https://cdn.lordicon.com/stipfqkk.json",  emoji:"📄" },
   { id:"extra",    label:"Extra",    licon:"https://cdn.lordicon.com/nobvwgyv.json",  emoji:"🏆" },
+  { id:"settings"  label:"Settings", licon:"https://cdn.lordicon.com/nobvwgyv.json",  emoji:"⚙️"},
 ];
 
 function BottomNav({ tab, setTab, c }) {
@@ -1229,12 +1256,115 @@ Exactly 5 objects. "answer" is 0-based index.` }] }),
   );
 }
 
+// ─── SETTINGS TAB ─────────────────────────────────────────────────────────────────
+function SettingsTab({ c, apiKey, setApiKey }) {
+  const [tempKey, setTempKey] = useState(apiKey);
+  const [showKey, setShowKey] = useState(false);
+
+  const handleSave = () => {
+    setApiKey(tempKey);
+    store.set("lp_deepseek_key", tempKey);
+    alert("API key saved.");
+  };
+
+  const handleClear = () => {
+    setTempKey("");
+    setApiKey("");
+    store.set("lp_deepseek_key", "");
+    alert("API key cleared.");
+  };
+
+  return (
+    <div style={{ padding: "22px 18px", maxWidth: 560, margin: "0 auto" }}>
+      <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 700, color: c.text, marginBottom: 4 }}>
+        Settings
+      </h2>
+      <p style={{ color: c.sub, fontSize: 13, marginBottom: 24 }}>
+        Your DeepSeek API key is stored only on your device.
+      </p>
+
+      <Card c={c}>
+        <label style={{ display: "block", marginBottom: 8, fontWeight: 600, color: c.text }}>
+          DeepSeek API Key
+        </label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            type={showKey ? "text" : "password"}
+            value={tempKey}
+            onChange={(e) => setTempKey(e.target.value)}
+            placeholder="sk-..."
+            style={{
+              flex: 1,
+              padding: "12px",
+              borderRadius: 12,
+              border: `1px solid ${c.border}`,
+              background: c.inputBg,
+              color: c.text,
+              fontSize: 14,
+              fontFamily: "monospace",
+            }}
+          />
+          <button
+            onClick={() => setShowKey(!showKey)}
+            style={{
+              background: "transparent",
+              border: `1px solid ${c.border}`,
+              borderRadius: 12,
+              padding: "12px",
+              cursor: "pointer",
+              fontSize: 16,
+            }}
+          >
+            {showKey ? "🙈" : "👁️"}
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+          <button
+            onClick={handleSave}
+            style={{
+              flex: 1,
+              background: c.primary,
+              border: "none",
+              borderRadius: 12,
+              padding: "12px",
+              color: "white",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Save Key
+          </button>
+          <button
+            onClick={handleClear}
+            style={{
+              background: "transparent",
+              border: `1px solid ${c.border}`,
+              borderRadius: 12,
+              padding: "12px",
+              color: c.sub,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Clear
+          </button>
+        </div>
+        <div style={{ marginTop: 16, fontSize: 12, color: c.muted }}>
+          Get your key from <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">DeepSeek Console</a>.
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 export default function LexPrep() {
   const [dark, setDark] = useState(() => store.get("lp_dark", false));
   const [progress, setProgress] = useState(() => store.get("lp_progress", {}));
   const [splash, setSplash] = useState(true);
   const [tab, setTab] = useState("home");
+  const [apiKey, setApiKey] = useState(() => store.get("lp_deepseek_key", ""));
   const c = T[dark ? "dark" : "light"];
 
   return (
@@ -1249,9 +1379,10 @@ export default function LexPrep() {
         <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
           {tab === "home"     && <HomeTab c={c} dark={dark} progress={progress} setTab={setTab}/>}
           {tab === "plan"     && <StudyPlanTab c={c} progress={progress} setProgress={setProgress}/>}
-          {tab === "practice" && <PracticeTab c={c}/>}
+          {tab === "practice" && <PracticeTab c={c} apiKey={apiKey} />}
           {tab === "papers"   && <PapersTab c={c}/>}
-          {tab === "extra"    && <ExtraTab c={c}/>}
+          {tab === "extra"    && <ExtraTab c={c} apiKey={apiKey} />}
+          {tab == "settings"  && <SettingsTab c={c} apiKey={apiKey} />}
         </div>
         <BottomNav tab={tab} setTab={setTab} c={c}/>
       </div>
